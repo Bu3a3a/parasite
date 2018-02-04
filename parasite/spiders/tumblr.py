@@ -27,7 +27,6 @@ class TumblrSpider(scrapy.Spider):
 
             if item['img']:
                 yield item
-
             else:
                 iframe_src = post.css("div.html_photoset > iframe.photoset ::attr(src)").extract_first()
                 if iframe_src:

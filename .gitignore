@@ -88,6 +88,8 @@ ENV/
 # Rope project settings
 .ropeproject
 
+# Idea
+.idea/
+
 # Credentials and sessions
-*credentials.json
-*vk_config*.json
+vk/*.json

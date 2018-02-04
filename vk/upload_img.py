@@ -1,18 +1,18 @@
 # encoding: utf-8
-# -*- coding: utf-8 -*-
+import json
 import requests
 from io import BytesIO
 from PIL import Image
 
 import vk_api
 
-from utils import get_credentials, get_web_image
+from utils import listify, get_vk_credentials, get_web_image
+from scrapinghub import ScrapingHub
 
 
 def main():
-    """ Пример загрузки фото """
 
-    login, password = get_credentials()
+    login, password, user_id, group_id = get_vk_credentials()
     vk_session = vk_api.VkApi(login, password)
 
     try:
@@ -21,27 +21,49 @@ def main():
         print(error_msg)
         return
 
-    """ В VkUpload реализованы методы загрузки файлов в ВК
-    """
-
     upload = vk_api.VkUpload(vk_session)
 
-    photos = ['http://78.media.tumblr.com/097c0e97b2cc4e27d722a618a3dacd83/tumblr_omh9qftW0k1qezkcbo1_1280.jpg',]
+    sh_api = ScrapingHub()
+    items = sh_api.get_items(280377).json()
+    items = sorted(items, key=lambda item: item['date'])    # Sort items by dates
 
-    loaded_photos = upload.photo_wall(  # Подставьте свои данные
-        [get_web_image(photo) for photo in photos],
-        user_id=138330346,
-        group_id=161443085
+    if not items:
+        return
+
+    # Get last scraped item
+    try:
+        with open('last_scraped_items.json', 'r') as f:
+            last_scraped = json.load(f)
+    except FileNotFoundError:
+        last_scraped = dict()
+
+    # Find a newer item than the last scraped one and assign it's value to last_scraped variable
+    if not last_scraped or last_scraped['date'] >= items[-1]['date']:
+        last_scraped = items[0]
+    else:
+        for item in items:
+            if item['date'] > last_scraped['date']:
+                last_scraped = item
+                break
+
+    # Load images to VK
+    loaded_images = upload.photo_wall(
+        [get_web_image(img) for img in listify(last_scraped['img'])],
+        user_id=user_id,
+        group_id=group_id
     )
 
-    attachment = ','.join('photo{owner_id}_{id}'.format(**item) for item in loaded_photos)
+    attachment = ','.join('photo{owner_id}_{id}'.format(**item) for item in loaded_images)
 
-    # Добавление записи на стену
+    # Post to the wall
     vk_session.method("wall.post", {
-        'owner_id': -161443085,  # Идентификаторы групп указываются со знаком минус
-        'message': 'Test!',
+        'owner_id': -group_id,  # Group ids must be negative
+        'message': last_scraped['description'],
         'attachment': attachment,
     })
+
+    with open('last_scraped_items.json', 'w') as f:
+        json.dump(last_scraped, f)
 
 if __name__ == '__main__':
     main()
